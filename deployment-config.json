@@ -1,0 +1,12 @@
+[
+    {
+        "name": "FitIn",
+        "ip": "ftp.esolutionsprovider.com",
+        "username": "github@esolutionsprovider.com",
+        "password" : "t,N0{ECiZxkL",
+        "port": "21",
+        "beforeHooks": "",
+        "afterHooks": "",
+        "path": "/home/esoldbtl/esolutionsprovider.com/github-actions"
+    }
+]

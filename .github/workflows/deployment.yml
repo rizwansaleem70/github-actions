@@ -1,0 +1,89 @@
+name: Deployment
+on:
+  push: 
+    branches: [dev]
+
+jobs: 
+  create-deployment-artifacts:
+    name: Create Deployment Artifacts
+    runs-on: ubuntu-latest
+    outputs:
+      deployment-matrix: ${{ steps.export-deployment-matrix.outputs.deployment-matrix }}
+
+    steps:
+    - uses:  actions/checkout@v2
+
+    # - name:   Complete Assets
+
+    #   run:  |
+    #     npm install 
+    #     npm run prod
+
+    # - name: Configure PHP version 8.1
+    #   uses: shivammathur/setup-php@master
+    #   with:
+    #     php-version: 8.1
+    #     extensions: mbstring, ctype, fileinfo, openssl, PDO, bcmath, json, tokenizer, xml
+
+    # - name: Install composer dependencies
+    #   run: |
+    #     composer install --no-interaction --prefer-dist
+
+    - name: Create ZipFile
+      env:
+        GITHUB_SHA: ${{ github.sha }}
+      run: tar -czf "${GITHUB_SHA}".tar.gz --exclude=*.git *
+
+
+    - name: Store Artifacts For Distribution
+      uses: actions/upload-artifact@v2
+      with:
+        name: app-build
+        path: ${{ github.sha }}.tar.gz
+      
+
+    - name: Export Deployment Matrix
+      id: export-deployment-matrix
+      run: |
+        JSON="$(cat ./deployment-config.json)"
+        JSON="${JSON//'%'/'%25'}"
+        JSON="${JSON//$'\n'/'%0A'}"
+        JSON="${JSON//$'\r'/'%0D'}"
+        echo "::set-output name=deployment-matrix::$JSON"
+
+  prepare-release-on-servers:
+    name: "${{ matrix.server.name }}: Prepare release"
+    runs-on: ubuntu-latest
+    needs: create-deployment-artifacts
+    strategy:
+      matrix:
+        server: ${{ fromJson(needs.create-deployment-artifacts.outputs.deployment-matrix) }}
+    steps:
+    - uses: actions/download-artifact@v2
+      with:
+        name: app-build
+    - name: Upload
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ matrix.server.ip }}
+        username: ${{ matrix.server.username }}
+        password: ${{ matrix.server.password }}
+        port: ${{ matrix.server.port }}
+        source: ${{ github.sha }}.tar.gz
+        target: ${{ matrix.server.path }}/artifacts
+
+        
+
+    - name: Extract archive and create directories
+      uses: appleboy/ssh-action@master
+      env:
+        GITHUB_SHA: ${{ github.sha }}
+      with:
+        host: ${{ matrix.server.ip }}
+        username: ${{ matrix.server.username }}
+        password: ${{ matrix.server.password }}
+        port: ${{ matrix.server.port }}
+        envs: GITHUB_SHA
+        script: |
+          mkdir -p "${{ matrix.server.path }}/releases/${GITHUB_SHA}"
+          tar xzf ${{ matrix.server.path }}/artifacts/${GITHUB_SHA}.tar.gz -C "${{ matrix.server.path }}/releases/${GITHUB_SHA}"
